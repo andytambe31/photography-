@@ -28,13 +28,16 @@
     document.documentElement.dataset.theme = next;
     store.set("a6700-theme", next);
   });
+  const scrim = $("#scrim");
   $("#menuBtn").addEventListener("click", () => sidebar.classList.toggle("open"));
+  scrim.addEventListener("click", () => sidebar.classList.remove("open"));
 
   // ── Course helpers ──
   const lessonKey = (m, l) => `${m.id}/${l.id}`;
   const PASS = 0.7;
   const quizPassed = (m) => (state.quiz[m.id] || 0) >= PASS;
   const moduleDone = (m) => m.lessons.every((l) => state.done[lessonKey(m, l)]) && quizPassed(m);
+  const moduleSteps = (m) => m.lessons.filter((l) => state.done[lessonKey(m, l)]).length + (quizPassed(m) ? 1 : 0);
 
   // Flat ordered list of every step (lessons + quiz) for prev/next navigation.
   const steps = [];
@@ -43,62 +46,117 @@
     steps.push({ m, quiz: true, href: `#/m/${m.id}/quiz` });
   });
   const stepDone = (s) => (s.quiz ? quizPassed(s.m) : !!state.done[lessonKey(s.m, s.l)]);
+  const stepLabel = (s) => (s.quiz ? `${s.m.title} quiz` : s.l.title);
+  const totalLessons = steps.length - MODULES.length;
+  const totalMinutes = MODULES.reduce((a, m) => a + m.lessons.reduce((b, l) => b + l.minutes, 0), 0);
 
   function updateProgress() {
     const pct = Math.round((steps.filter(stepDone).length / steps.length) * 100);
     $("#progressPill").textContent = `${pct}%`;
+    $("#progressFill").style.width = `${pct}%`;
     return pct;
   }
 
   function renderSidebar(current) {
-    let html = `<a href="#/" class="${current === "home" ? "active" : ""}">🏠 Course home</a>
-      <a href="#/tools" class="${current === "tools" ? "active" : ""}">🧪 Interactive tools</a>
-      <a href="#/cheatsheet" class="${current === "cheatsheet" ? "active" : ""}">📋 Cheat sheet</a>`;
+    const top = [["home", "#/", "🏠", "Course home"], ["tools", "#/tools", "🧪", "Interactive tools"], ["cheatsheet", "#/cheatsheet", "📋", "Cheat sheet"]];
+    let html = top.map(([k, href, ico, label]) =>
+      `<a href="${href}" class="side-link ${current === k ? "active" : ""}"><span class="ico">${ico}</span>${label}</a>`).join("");
     MODULES.forEach((m, i) => {
-      html += `<h4>${i + 1}. ${m.title}</h4>`;
-      m.lessons.forEach((l, j) => {
+      const open = current.startsWith(m.id + "/");
+      html += `<details class="side-group" ${open ? "open" : ""}>
+        <summary><span class="mod-ico">${m.icon}</span><span class="mod-title">${i + 1}. ${m.title}</span>
+          <span class="mod-frac">${moduleSteps(m)}/${m.lessons.length + 1}</span><span class="chev">▶</span></summary>
+        <div class="lessons">`;
+      m.lessons.forEach((l) => {
         const k = lessonKey(m, l);
-        html += `<a href="#/m/${m.id}/${l.id}" class="${current === k ? "active" : ""}">
-          <span class="num">${i + 1}.${j + 1}</span>${l.title}${state.done[k] ? '<span class="check">✓</span>' : ""}</a>`;
+        html += `<a href="#/m/${m.id}/${l.id}" class="side-link ${current === k ? "active" : ""}">
+          <span class="dot ${state.done[k] ? "done" : ""}"></span>${l.title}</a>`;
       });
-      html += `<a href="#/m/${m.id}/quiz" class="${current === m.id + "/quiz" ? "active" : ""}">
-        <span class="num">✎</span>Quiz${quizPassed(m) ? '<span class="check">✓</span>' : ""}</a>`;
+      html += `<a href="#/m/${m.id}/quiz" class="side-link ${current === m.id + "/quiz" ? "active" : ""}">
+        <span class="dot ${quizPassed(m) ? "done" : ""}"></span>Module quiz</a></div></details>`;
     });
     sidebar.innerHTML = html;
   }
+
+  function apertureSvg() {
+    const c = 100, hex = 34, outer = 96;
+    const pt = (r, deg) => { const a = (deg * Math.PI) / 180; return `${(c + r * Math.cos(a)).toFixed(1)},${(c + r * Math.sin(a)).toFixed(1)}`; };
+    let blades = "";
+    for (let i = 0; i < 6; i++) {
+      const a = i * 60;
+      blades += `<polygon points="${pt(hex, a)} ${pt(hex, a + 60)} ${pt(outer + 30, a + 100)} ${pt(outer + 30, a + 30)}"
+        fill="${i % 2 ? "#2b2620" : "#342d26"}" stroke="#0e0c0a" stroke-width="1.5"/>`;
+    }
+    return `<svg class="aperture" viewBox="0 0 200 200" aria-hidden="true">
+      <defs><clipPath id="lensClip"><circle cx="100" cy="100" r="${outer}"/></clipPath>
+      <radialGradient id="glass" cx="40%" cy="35%"><stop offset="0" stop-color="#ffd9a0" stop-opacity=".9"/><stop offset=".5" stop-color="#e8a33d" stop-opacity=".35"/><stop offset="1" stop-color="#1a1410"/></radialGradient></defs>
+      <circle cx="100" cy="100" r="99" fill="#2a2520"/>
+      <circle cx="100" cy="100" r="${outer}" fill="url(#glass)"/>
+      <g clip-path="url(#lensClip)"><g class="blades">${blades}</g></g>
+      <circle cx="100" cy="100" r="${outer}" fill="none" stroke="#5a4e42" stroke-width="2"/>
+      <circle cx="100" cy="100" r="99" fill="none" stroke="#e8a33d" stroke-opacity=".5" stroke-width="1"/>
+      <ellipse cx="78" cy="70" rx="16" ry="9" fill="#fff" opacity=".14" transform="rotate(-30 78 70)"/>
+    </svg>`;
+  }
+
+  const footer = () => `<footer class="site-foot"><span>a6700 Photo School · an independent learning guide, not affiliated with Sony.</span>
+    <a href="#/cheatsheet">Cheat sheet →</a></footer>`;
 
   // ── Views ──
   function viewHome() {
     const pct = updateProgress();
     const next = steps.find((s) => !stepDone(s)) || steps[0];
-    const totalMin = MODULES.reduce((a, m) => a + m.lessons.reduce((b, l) => b + l.minutes, 0), 0);
-    app.innerHTML = `
+    app.innerHTML = `<div class="page">
       <section class="hero">
         <div>
           <div class="eyebrow">Sony a6700 · Beginner → Confident</div>
-          <h1>Learn photography with the camera in your hands.</h1>
-          <p class="lead">${MODULES.length} modules, ${steps.length - MODULES.length} short lessons, quizzes and interactive simulators — every concept tied to the exact buttons and menus on your a6700. About ${Math.round(totalMin / 60)} hours of reading, plus a week of practice assignments.</p>
-          <p><a class="btn primary" href="${next.href}">${pct ? "Continue" : "Start the course"} →</a>
-             <a class="btn" href="#/tools">Try the exposure simulator</a></p>
+          <h1>Learn photography with <span>your camera</span> in hand.</h1>
+          <p class="lead">Short lessons, quizzes and simulators, each idea tied to the exact dials, buttons and menus on your a6700.</p>
+          <div class="hero-stats">
+            <div><b>${MODULES.length}</b><span>Modules</span></div>
+            <div><b>${totalLessons}</b><span>Lessons</span></div>
+            <div><b>~${Math.round(totalMinutes / 60)}h</b><span>Reading</span></div>
+            <div><b>${pct}%</b><span>Complete</span></div>
+          </div>
+          <div class="hero-actions">
+            <a class="btn primary" href="${next.href}">${pct ? "Continue: " + stepLabel(next) : "Start the course"} →</a>
+            <a class="btn ghost" href="#/tools">Try the simulator</a>
+          </div>
         </div>
-        <div class="card">
-          <h3 style="margin-top:0">Your camera at a glance</h3>
-          <ul class="spec-list">${CAMERA_SPECS.map(([k, v]) => `<li><span>${k}</span><span>${v}</span></li>`).join("")}</ul>
-        </div>
+        ${apertureSvg()}
       </section>
-      <h2>Modules</h2>
+
+      <div class="feature-row">
+        <a class="card feature" href="#/tools"><span class="f-ico">🎚️</span><div><b>Exposure simulator</b><span>See aperture, shutter and ISO change a photo live.</span></div></a>
+        <a class="card feature" href="#/m/meet/setup"><span class="f-ico">✅</span><div><b>Day-one setup</b><span>12 settings to change before your first shoot.</span></div></a>
+        <a class="card feature" href="#/cheatsheet"><span class="f-ico">📋</span><div><b>Printable cheat sheet</b><span>Starting settings for every kind of shot.</span></div></a>
+      </div>
+
+      <div class="section-head"><h2>Modules</h2><p>Work through in order, or jump to what you need.</p></div>
       <div class="grid">
         ${MODULES.map((m, i) => {
-          const done = m.lessons.filter((l) => state.done[lessonKey(m, l)]).length;
+          const done = moduleSteps(m), total = m.lessons.length + 1;
+          const mins = m.lessons.reduce((a, l) => a + l.minutes, 0);
+          const status = moduleDone(m) ? `<span class="badge good">✓ Complete</span>`
+            : done ? `<span class="badge accent">In progress</span>` : `<span class="badge">${mins} min</span>`;
           return `<a class="card module-card ${moduleDone(m) ? "done" : ""}" href="#/m/${m.id}/${m.lessons[0].id}">
-            <span class="icon">${m.icon}</span>
-            <h3>${i + 1}. ${m.title}</h3>
+            <div class="mc-top"><span class="icon">${m.icon}</span><span class="mc-num">${String(i + 1).padStart(2, "0")}</span></div>
+            <h3>${m.title}</h3>
             <p>${m.summary}</p>
-            <span class="meta">${done}/${m.lessons.length} lessons · quiz ${quizPassed(m) ? "passed ✓" : state.quiz[m.id] != null ? Math.round(state.quiz[m.id] * 100) + "%" : "not taken"}</span>
+            <div class="mc-foot">
+              <div class="mc-meta"><span>${m.lessons.length} lessons + quiz</span>${status}</div>
+              <div class="bar"><i style="width:${(done / total) * 100}%"></i></div>
+            </div>
           </a>`;
         }).join("")}
       </div>
-      <p style="margin-top:32px;color:var(--muted);font-size:.85rem">Progress is saved in this browser only. <button class="btn" id="resetBtn" style="padding:4px 10px;font-size:.8rem">Reset progress</button></p>`;
+
+      <div class="section-head"><h2>Your camera at a glance</h2><p>Key a6700 specs referenced throughout the course.</p></div>
+      <div class="specs">${CAMERA_SPECS.map(([k, v]) => `<div class="spec"><span>${k}</span><b>${v}</b></div>`).join("")}</div>
+
+      <footer class="site-foot"><span>Progress is saved in this browser only.</span>
+        <button class="btn small" id="resetBtn">Reset progress</button></footer>
+    </div>`;
     $("#resetBtn").addEventListener("click", () => {
       if (!confirm("Reset all lesson, quiz and checklist progress?")) return;
       state.done = {}; state.quiz = {}; state.checks = {}; save(); route();
@@ -107,53 +165,81 @@
 
   function navButtons(idx) {
     const prev = steps[idx - 1], next = steps[idx + 1];
-    const label = (s) => (s.quiz ? `${s.m.title} quiz` : s.l.title);
     return `<div class="lesson-nav">
-      ${prev ? `<a class="btn" href="${prev.href}">← ${label(prev)}</a>` : "<span></span>"}
-      ${next ? `<a class="btn" href="${next.href}">${label(next)} →</a>` : `<a class="btn" href="#/">Course home</a>`}
+      ${prev ? `<a class="nav-card" href="${prev.href}"><small>← Previous</small><b>${stepLabel(prev)}</b></a>` : "<span></span>"}
+      ${next ? `<a class="nav-card next" href="${next.href}"><small>Next →</small><b>${stepLabel(next)}</b></a>`
+        : `<a class="nav-card next" href="#/"><small>Finished →</small><b>Course home</b></a>`}
     </div>`;
+  }
+
+  function lessonHeader(m, currentKey, title, chips) {
+    const mi = MODULES.indexOf(m);
+    const items = [...m.lessons.map((l) => ({ k: lessonKey(m, l), href: `#/m/${m.id}/${l.id}`, done: state.done[lessonKey(m, l)], t: l.title })),
+      { k: m.id + "/quiz", href: `#/m/${m.id}/quiz`, done: quizPassed(m), t: "Quiz" }];
+    return `<div class="crumbs"><a href="#/">Course</a><span>/</span><a href="#/m/${m.id}/${m.lessons[0].id}">${m.icon} Module ${mi + 1}: ${m.title}</a></div>
+      <header class="lesson-head">
+        <h1>${title}</h1>
+        <div class="lesson-meta">${chips}</div>
+        <nav class="stepper" aria-label="Module progress">${items.map((x) =>
+          `<a href="${x.href}" title="${x.t}" class="${x.k === currentKey ? "current" : x.done ? "done" : ""}"></a>`).join("")}</nav>
+      </header>`;
+  }
+
+  // Post-process lesson HTML: scrollable tables, labelled callouts.
+  function enhance(root) {
+    root.querySelectorAll("article table").forEach((t) => {
+      const w = document.createElement("div"); w.className = "table-wrap";
+      t.parentNode.insertBefore(w, t); w.appendChild(t);
+    });
+    const labels = { tip: "Tip", a6700: "On your a6700", warn: "Watch out", try: "Try it" };
+    root.querySelectorAll("article .callout").forEach((c) => {
+      const type = Object.keys(labels).find((k) => c.classList.contains(k));
+      if (type) c.insertAdjacentHTML("afterbegin", `<span class="callout-label">${labels[type]}</span>`);
+    });
   }
 
   function viewLesson(m, l) {
     const idx = steps.findIndex((s) => s.l === l);
-    const mi = MODULES.indexOf(m), li = m.lessons.indexOf(l);
+    const li = m.lessons.indexOf(l);
     const k = lessonKey(m, l);
     const next = steps[idx + 1];
-    app.innerHTML = `
-      <div class="eyebrow">Module ${mi + 1} · ${m.title} · Lesson ${li + 1} of ${m.lessons.length} · ${l.minutes} min</div>
-      <h1>${l.title}</h1>
+    app.innerHTML = `<div class="reading">
+      ${lessonHeader(m, k, l.title, `<span class="badge">Lesson ${li + 1} of ${m.lessons.length}</span><span class="badge">⏱ ${l.minutes} min read</span>${state.done[k] ? '<span class="badge good">✓ Completed</span>' : ""}`)}
       <article>${l.html}</article>
-      <p style="margin-top:40px"><button class="btn ${state.done[k] ? "done" : "primary"}" id="doneBtn">
-        ${state.done[k] ? "✓ Completed" : "Mark complete & continue →"}</button></p>
-      ${navButtons(idx)}`;
+      <div class="complete-box">
+        <p>${state.done[k] ? "Nice work — this lesson is marked complete." : "Finished reading? Mark it done to track your progress."}</p>
+        <button class="btn ${state.done[k] ? "done" : "primary"}" id="doneBtn">${state.done[k] ? "✓ Completed" : "Mark complete & continue →"}</button>
+      </div>
+      ${navButtons(idx)}
+      ${footer()}
+    </div>`;
     $("#doneBtn").addEventListener("click", () => {
       if (state.done[k]) { delete state.done[k]; save(); route(); return; }
       state.done[k] = true; save();
       location.hash = next ? next.href : "#/";
     });
+    enhance(app);
     mountWidgets(app);
   }
 
   function viewQuiz(m) {
     const idx = steps.findIndex((s) => s.quiz && s.m === m);
-    const mi = MODULES.indexOf(m);
     const answers = new Array(m.quiz.length).fill(null);
-    app.innerHTML = `
-      <div class="eyebrow">Module ${mi + 1} · ${m.title}</div>
-      <h1>Quiz: ${m.title}</h1>
-      <p class="lead">Pick an answer to see the explanation. Score ${Math.round(PASS * 100)}% or more to complete the module.${state.quiz[m.id] != null ? ` Best so far: <b>${Math.round(state.quiz[m.id] * 100)}%</b>.` : ""}</p>
-      <div class="quiz card">
-        ${m.quiz.map((q, i) => `
-          <div class="q" data-q="${i}">
-            <p>${i + 1}. ${q.q}</p>
-            ${q.options.map((o, j) => `<label><input type="radio" name="q${i}" value="${j}"> ${o}</label>`).join("")}
-            <div class="why">${q.why}</div>
-          </div>`).join("")}
-        <div class="score" id="score"></div>
-        <button class="btn" id="retry" hidden>Retake quiz</button>
-      </div>
-      ${navButtons(idx)}`;
-    app.querySelectorAll(".q").forEach((el) => {
+    const best = state.quiz[m.id];
+    app.innerHTML = `<div class="reading">
+      ${lessonHeader(m, m.id + "/quiz", `Quiz: ${m.title}`, `<span class="badge">${m.quiz.length} questions</span><span class="badge">Pass: ${Math.round(PASS * 100)}%</span>${best != null ? `<span class="badge ${best >= PASS ? "good" : "accent"}">Best: ${Math.round(best * 100)}%</span>` : ""}`)}
+      <p class="lead">Pick an answer to see why it's right or wrong.</p>
+      ${m.quiz.map((q, i) => `
+        <div class="card quiz-q" data-q="${i}">
+          <p class="q-title"><span class="q-num">${i + 1}</span><span>${q.q}</span></p>
+          <div class="opts">${q.options.map((o, j) => `<label><input type="radio" name="q${i}" value="${j}"><span class="letter">${"ABCD"[j]}</span><span>${o}</span></label>`).join("")}</div>
+          <div class="why">${q.why}</div>
+        </div>`).join("")}
+      <div class="card score-card" id="scoreCard" hidden></div>
+      ${navButtons(idx)}
+      ${footer()}
+    </div>`;
+    app.querySelectorAll(".quiz-q").forEach((el) => {
       const i = +el.dataset.q, q = m.quiz[i];
       el.addEventListener("change", (e) => {
         if (answers[i] !== null) return;
@@ -168,33 +254,49 @@
         if (answers.every((a) => a !== null)) {
           const score = answers.filter((a, n) => a === m.quiz[n].answer).length / m.quiz.length;
           state.quiz[m.id] = Math.max(state.quiz[m.id] || 0, score); save();
-          $("#score").innerHTML = `Score: ${Math.round(score * 100)}% — ${score >= PASS ? "🎉 Module complete!" : "Review the lessons and try again."}`;
-          $("#retry").hidden = false;
+          const passed = score >= PASS, nxt = steps[idx + 1];
+          const sc = $("#scoreCard");
+          sc.hidden = false;
+          sc.innerHTML = `<div class="big" style="color:var(${passed ? "--good" : "--bad"})">${Math.round(score * 100)}%</div>
+            <p>${passed ? "🎉 Module complete! Great job." : "Not quite — review the lessons and try again."}</p>
+            <div class="hero-actions" style="justify-content:center">
+              <button class="btn" id="retry">Retake quiz</button>
+              ${passed && nxt ? `<a class="btn primary" href="${nxt.href}">Next module →</a>` : ""}
+            </div>`;
+          $("#retry").addEventListener("click", () => { viewQuiz(m); window.scrollTo(0, 0); });
+          sc.scrollIntoView({ behavior: "smooth", block: "center" });
           renderSidebar(m.id + "/quiz"); updateProgress();
         }
       });
     });
-    $("#retry").addEventListener("click", () => viewQuiz(m));
   }
 
   function viewTools() {
-    app.innerHTML = `
-      <div class="eyebrow">Interactive tools</div>
-      <h1>Practice without leaving your chair</h1>
+    app.innerHTML = `<div class="reading">
+      <div class="crumbs"><a href="#/">Course</a><span>/</span><span>Tools</span></div>
+      <header class="lesson-head"><h1>Interactive tools</h1>
+        <p class="lead" style="margin:0">Practise the theory without leaving your chair.</p></header>
+      <article>
       <h2>Exposure simulator</h2>
       <p>Pick a lighting situation, then balance aperture, shutter and ISO until the meter sits on 0.</p>
       <div data-widget="exposure-sim"></div>
-      <h2>Depth of field calculator (APS-C)</h2>
+      <h2>Depth of field calculator</h2>
+      <p>How much of the scene will be sharp, for your lens on the a6700's APS-C sensor.</p>
       <div data-widget="dof-calc"></div>
       <h2>Quick rules</h2>
-      <div data-widget="quick-calc"></div>`;
+      <div data-widget="quick-calc"></div>
+      </article>
+      ${footer()}
+    </div>`;
     mountWidgets(app);
   }
 
   function viewCheatsheet() {
-    app.innerHTML = `
-      <div class="eyebrow">Print me</div>
-      <h1>a6700 cheat sheet</h1>
+    app.innerHTML = `<div class="reading">
+      <div class="crumbs"><a href="#/">Course</a><span>/</span><span>Cheat sheet</span></div>
+      <header class="lesson-head"><h1>a6700 cheat sheet</h1>
+        <div class="lesson-meta"><button class="btn small" onclick="window.print()">🖨️ Print</button></div></header>
+      <article>
       <h2>Starting settings</h2>
       <table>
         <tr><th>Scene</th><th>Mode</th><th>Aperture</th><th>Shutter</th><th>ISO</th><th>Focus</th></tr>
@@ -228,8 +330,11 @@
         <tr><td>Shutter won't fire</td><td>No card / focus not confirmed → check card, Priority Set in AF-S</td></tr>
       </table>
       <h2>a6700 specs</h2>
-      <ul class="spec-list card">${CAMERA_SPECS.map(([k, v]) => `<li><span>${k}</span><span>${v}</span></li>`).join("")}</ul>
-      <p><button class="btn" onclick="window.print()">🖨️ Print</button></p>`;
+      <div class="specs">${CAMERA_SPECS.map(([k, v]) => `<div class="spec"><span>${k}</span><b>${v}</b></div>`).join("")}</div>
+      </article>
+      ${footer()}
+    </div>`;
+    enhance(app);
   }
 
   // ── Widgets ──
@@ -249,8 +354,12 @@
     el.className = "card checklist";
     el.innerHTML = items.map((t, i) =>
       `<label><input type="checkbox" data-i="${i}" ${checks[i] ? "checked" : ""}><span>${t}</span></label>`).join("")
-      + `<div class="score" style="font-size:.9rem;color:var(--muted)"></div>`;
-    const tally = () => { el.querySelector(".score").textContent = `${Object.values(checks).filter(Boolean).length} / ${items.length} done`; };
+      + `<div class="cl-foot"><div class="bar"><i></i></div><span class="cl-count"></span></div>`;
+    const tally = () => {
+      const n = Object.values(checks).filter(Boolean).length;
+      el.querySelector(".cl-count").textContent = `${n} / ${items.length} done`;
+      el.querySelector(".cl-foot .bar > i").style.width = `${(n / items.length) * 100}%`;
+    };
     el.addEventListener("change", (e) => { checks[e.target.dataset.i] = e.target.checked; save(); tally(); });
     tally();
   }
@@ -273,7 +382,7 @@
       <canvas width="800" height="450" aria-label="Simulated photo preview"></canvas>
       <div class="meter"><b>Meter</b>
         <div class="meter-bar"><div class="meter-ticks"><span>−3</span><span>−2</span><span>−1</span><span>0</span><span>+1</span><span>+2</span><span>+3</span></div><div class="meter-needle"></div></div>
-        <span class="meter-val" style="min-width:4.5em;text-align:right;font-weight:700"></span></div>
+        <span class="meter-val" style="min-width:4.5em;text-align:right;font-weight:700;font-variant-numeric:tabular-nums"></span></div>
       <div class="sim-controls">
         <div class="ctrl"><label>Light <output data-o="scene"></output></label>
           <input type="range" data-k="scene" min="0" max="${SCENES.length - 1}" step="1"><small>How bright the scene is</small></div>
@@ -291,7 +400,7 @@
         <button class="btn" data-p="landscape">Everything sharp</button>
         <button class="btn" data-p="auto">Auto-balance ISO</button>
       </div>
-      <p class="sim-note" style="margin:0;font-size:.9rem;color:var(--muted)"></p>`;
+      <p class="sim-note"></p>`;
 
     const canvas = el.querySelector("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -485,7 +594,7 @@
       <div class="calc-out"></div>
       <div class="dof-bar"><div class="dof-zone"></div><div class="dof-subject"></div></div>
       <div class="dof-scale"><span>camera</span><span class="dof-max"></span></div>
-      <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">APS-C circle of confusion 0.02 mm. Equivalent full-frame focal length shown for framing.</p>`;
+      <p style="font-size:.8rem;color:var(--muted);margin:12px 0 0">APS-C circle of confusion 0.02 mm. Equivalent full-frame focal length shown for framing.</p>`;
     const out = el.querySelector(".calc-out");
     const fmt = (m) => (!isFinite(m) ? "∞" : m < 1 ? `${(m * 100).toFixed(0)} cm` : `${m.toFixed(2)} m`);
     function calc() {
