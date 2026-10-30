@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>a6700 Photo School</title>
+  <meta name="description" content="A hands-on photography course built around the Sony a6700: exposure, autofocus, color, composition, genre recipes and video.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23e8a33d'/><circle cx='50' cy='50' r='24' fill='%23161412'/><circle cx='42' cy='42' r='7' fill='%23fff' opacity='.7'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+    <a href="#/" class="brand"><span class="brand-dot"></span>a6700 Photo School</a>
+    <div class="progress-pill" id="progressPill" title="Course progress">0%</div>
+    <button class="theme-btn" id="themeBtn" aria-label="Toggle theme">◐</button>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Course navigation"></nav>
+    <main id="app" tabindex="-1"></main>
+  </div>
+  <script src="content.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
